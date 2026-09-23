@@ -7,6 +7,7 @@ from app.db.database import Base
 class UserRole(str, enum.Enum):
     SELLER = "SELLER"
     BUYER = "BUYER"
+    CONTRACTOR_BUILDER = "CONTRACTOR_BUILDER"
     RECYCLER = "RECYCLER"
     ADMIN = "ADMIN"
 
@@ -112,7 +113,7 @@ class ListingImage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False)
-    image_url = Column(String(500), nullable=False)
+    image_url = Column(Text, nullable=False)
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -192,7 +193,8 @@ class Report(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False)
+    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=True)
+    reported_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     reason = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     status = Column(String(50), default="PENDING")
@@ -200,3 +202,4 @@ class Report(Base):
 
     reporter = relationship("User", foreign_keys=[reporter_id])
     listing = relationship("Listing", foreign_keys=[listing_id])
+    reported_user = relationship("User", foreign_keys=[reported_user_id])

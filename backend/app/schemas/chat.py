@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from app.models.models import TransactionStatus
 from app.schemas.listing import ListingResponse, SellerSummaryResponse
+from app.schemas.schemas import PublicUserResponse
 
 class MessageCreate(BaseModel):
     message: str
@@ -57,18 +58,23 @@ class TransactionResponse(BaseModel):
         from_attributes = True
 
 class ReportCreate(BaseModel):
-    listing_id: int
+    listing_id: Optional[int] = None
+    reported_user_id: Optional[int] = None
     reason: str
     description: Optional[str] = None
 
 class ReportResponse(BaseModel):
     id: int
     reporter_id: int
-    listing_id: int
+    listing_id: Optional[int] = None
+    reported_user_id: Optional[int] = None
     reason: str
     description: Optional[str] = None
     status: str
     created_at: datetime
+    reporter: Optional[PublicUserResponse] = None
+    reported_user: Optional[PublicUserResponse] = None
+    listing: Optional[ListingResponse] = None
 
     class Config:
         from_attributes = True

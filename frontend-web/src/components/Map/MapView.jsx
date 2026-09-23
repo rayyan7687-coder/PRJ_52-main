@@ -3,12 +3,14 @@ import React, { useEffect, useRef, useState } from 'react';
 let mapsLoader;
 const escapeMapText = (value) => String(value ?? '').replace(/[<>&"']/g, '');
 
-function loadGoogleMaps(apiKey) {
+const DEFAULT_MAPS_KEY = 'AIzaSyAHQoiQWaoWDFL06WH4zlaJueUzh-srPOI';
+
+export function loadGoogleMaps(apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_MAPS_KEY) {
   if (window.google?.maps) return Promise.resolve(window.google.maps);
   if (mapsLoader) return mapsLoader;
   mapsLoader = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&v=weekly`;
     script.async = true;
     script.onload = () => resolve(window.google.maps);
     script.onerror = () => reject(new Error('Google Maps could not be loaded. Check the API key and its referrer restrictions.'));
@@ -20,7 +22,7 @@ function loadGoogleMaps(apiKey) {
 export const MapView = ({ listings = [], userLocation, onLocationSelect, height = '24rem' }) => {
   const containerRef = useRef(null);
   const [error, setError] = useState('');
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_MAPS_KEY;
   const center = userLocation || { latitude: 12.9716, longitude: 77.5946 };
 
   useEffect(() => {

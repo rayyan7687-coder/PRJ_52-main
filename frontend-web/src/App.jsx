@@ -11,6 +11,7 @@ import { SellerDashboard } from './features/listings/pages/SellerDashboard';
 import { RecyclerPage } from './features/recycler/pages/RecyclerPage';
 import { ChatPage } from './features/chat/pages/ChatPage';
 import { AdminPage } from './features/admin/pages/AdminPage';
+import { TermsPage } from './pages/TermsPage';
 
 export const App = () => {
   return (
@@ -20,6 +21,7 @@ export const App = () => {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/listings/:id" element={<ListingDetailsPage />} />
         <Route path="/seller/create" element={<CreateListingPage />} />

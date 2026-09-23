@@ -20,6 +20,10 @@ export const apiFetch = async (endpoint, options = {}) => {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: 'An error occurred' }));
+    if (response.status === 401 || (errorData.detail && errorData.detail.toLowerCase().includes('blocked'))) {
+      localStorage.removeItem('token');
+      window.dispatchEvent(new Event('auth:logout'));
+    }
     throw new Error(errorData.detail || `Error ${response.status}`);
   }
 
