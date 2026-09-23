@@ -1,0 +1,159 @@
+BUILDLOOP - RUN IN VS CODE AND DEPLOY
+======================================
+
+This file is the practical setup guide for verifying BuildLoop in VS Code before
+deployment. The app has two independent processes: FastAPI (backend) and Vite/
+React (frontend). Keep both terminals open while developing.
+
+PREREQUISITES
+-------------
+1. Install Python 3.11 or newer and Node.js 20 LTS or newer.
+2. Open the PRJ_52-main folder in VS Code (File > Open Folder).
+3. In VS Code, install the Python and ESLint extensions if they are not already
+   installed.
+
+LOCAL BACKEND SETUP (VS CODE TERMINAL 1)
+----------------------------------------
+1. Open a new VS Code terminal and run:
+
+   cd backend
+   py -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
+   Copy-Item .env.example .env
+
+   If PowerShell blocks activation, run this only for the current terminal:
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+2. Open backend/.env and set a private random SECRET_KEY. It must be at least
+   32 characters for production. Do not commit .env.
+
+3. Create the local database through migrations, then add the starter categories:
+
+   alembic upgrade head
+   python -m app.db.init_db
+
+4. Start the backend:
+
+   uvicorn app.main:app --reload --port 8000
+
+5. Verify it in the browser:
+
+   http://localhost:8000/health
+   http://localhost:8000/api/v1/docs
+
+   The health endpoint should return status "ok". The docs page is useful for
+   testing registration, login, listings, search, chat, and transactions.
+
+LOCAL FRONTEND SETUP (VS CODE TERMINAL 2)
+-----------------------------------------
+1. Open a second terminal and run:
+
+   cd frontend-web
+   npm install
+   npm run dev
+
+2. Open the URL Vite prints (normally http://localhost:3000).
+
+Local development uses the Vite proxy, so do NOT create frontend-web/.env for
+normal local use. The browser calls /api/v1 and Vite forwards it to port 8000.
+The exception is Google Maps: copy frontend-web/.env.example to .env and set a
+VITE_GOOGLE_MAPS_API_KEY to enable the live map.
+
+VERIFICATION CHECKLIST
+----------------------
+Before deploying, run these commands:
+
+   # Backend terminal, with .venv activated and working directory backend
+   pytest
+
+   # Frontend terminal, working directory frontend-web
+   npm run build
+   npm run lint
+
+Also verify manually:
+  - /health returns HTTP 200.
+  - You can register a user, sign in, and open the dashboard.
+  - You can create and search for a listing.
+  - No secret, password, database URL, or .env file appears in source control.
+
+POSTGRESQL BEFORE PRODUCTION
+----------------------------
+SQLite is for local development only. Create a managed PostgreSQL database
+(Render PostgreSQL, Neon, Supabase, Railway, or another provider) before
+deploying. Put the provider connection string in the backend deployment
+environment variables as DATABASE_URL. Use the SQLAlchemy psycopg URL form:
+
+   postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE
+
+Never put this connection string in frontend environment variables or commit it.
+
+BACKEND DEPLOYMENT (RENDER EXAMPLE)
+-----------------------------------
+1. Push the project to a private/public Git repository without .env files.
+2. Create a Render Web Service from that repository.
+3. Set its root directory to: backend
+4. Set build command to:
+
+   pip install -r requirements.txt
+
+5. Set start command to:
+
+   alembic upgrade head && python -m app.db.init_db && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+6. Add these backend environment variables in Render:
+
+   ENVIRONMENT=production
+   SECRET_KEY=<a unique random secret of at least 32 characters>
+   DATABASE_URL=<your managed PostgreSQL URL using postgresql+psycopg://>
+   CORS_ORIGINS=https://<your-frontend-domain>
+
+7. After deployment, open https://<your-backend-domain>/health. It must return
+   status "ok" before proceeding.
+
+FRONTEND DEPLOYMENT (VERCEL EXAMPLE)
+------------------------------------
+1. Import the same Git repository into Vercel.
+2. Set the root directory to: frontend-web
+3. Vercel should detect Vite and use build command: npm run build
+   with output directory: dist.
+4. Add this Vercel environment variable:
+
+   VITE_API_URL=https://<your-backend-domain>
+   VITE_GOOGLE_MAPS_API_KEY=<browser key restricted to your frontend domain>
+
+   Do not add /api/v1 at the end: the application adds it itself.
+5. Deploy. Then copy the Vercel URL and update the backend CORS_ORIGINS value to
+   that exact URL. Redeploy the backend.
+6. Test registration, login, and listing flows from the deployed frontend.
+
+SECURITY NOTES
+--------------
+- Production startup rejects SQLite, wildcard CORS, and weak/default secrets.
+- Google Maps requires enabled billing and an API key. Restrict the browser key
+  by HTTP referrer to localhost during development and to your exact Vercel
+  domain in production. The app stores a user's browser location only after an
+  authenticated user deliberately selects "Use my location"; opting out via
+  the API removes that saved location. A listing's pickup location is separate
+  and is intentionally shown to buyers as part of the listing.
+- Current login uses an access token stored in browser localStorage. That is
+  acceptable for local verification, but refresh tokens with secure httpOnly
+  cookies should be implemented before handling real user accounts at scale.
+- Google OAuth, Google Maps, Cloudinary uploads, rate limiting, email
+  verification, Sentry, and a custom domain/HTTPS configuration are still
+  separate production features; do not claim they are live until each is wired,
+  tested, and configured with provider secrets/restrictions.
+- HTTPS is automatically available on the default Vercel and Render domains.
+  Configure a custom domain only after the application works on those URLs.
+
+CREATING FUTURE DATABASE CHANGES
+--------------------------------
+After changing a SQLAlchemy model, create and review a migration:
+
+   cd backend
+   .\.venv\Scripts\Activate.ps1
+   alembic revision --autogenerate -m "describe the change"
+   alembic upgrade head
+
+Commit the generated file under backend/alembic/versions. Always test the
+migration against a non-production PostgreSQL database before deploying it.
