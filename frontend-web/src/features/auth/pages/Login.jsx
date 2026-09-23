@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { AlertTriangle, Mail } from 'lucide-react';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -20,6 +21,8 @@ export const Login = () => {
     }
   };
 
+  const isBlockedError = error.toLowerCase().includes('blocked');
+
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-slate-100">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -37,8 +40,23 @@ export const Login = () => {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-slate-900 py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-slate-800">
           {error && (
-            <div className="mb-4 bg-red-950/80 border border-red-800 text-red-200 text-sm p-3 rounded">
-              {error}
+            <div className={`mb-4 p-4 rounded-lg text-sm border ${
+              isBlockedError
+                ? 'bg-red-950/90 border-red-800 text-red-200'
+                : 'bg-red-950/80 border-red-800 text-red-200'
+            }`}>
+              <div className="flex items-start space-x-2">
+                <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold">{error}</p>
+                  {isBlockedError && (
+                    <div className="pt-2 text-xs text-red-300 border-t border-red-900 flex items-center space-x-1.5">
+                      <Mail className="h-4 w-4 text-red-400" />
+                      <span>Contact Administrator: <a href="mailto:admin@buildloop.com" className="font-mono text-emerald-400 underline">admin@buildloop.com</a></span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
           <form className="space-y-6" onSubmit={handleSubmit}>

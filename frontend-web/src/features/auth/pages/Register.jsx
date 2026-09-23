@@ -8,11 +8,11 @@ export const Register = () => {
     email: '',
     phone: '',
     password: '',
-    role: 'BUYER',
+    role: 'CONTRACTOR_BUILDER',
     address: 'Bangalore, India',
-    latitude: 12.9716,
-    longitude: 77.5946
+    admin_key: ''
   });
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState('');
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -24,12 +24,27 @@ export const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!termsAccepted) {
+      setError('You must accept the Terms and Conditions to register.');
+      return;
+    }
+
     try {
-      await register({
-        ...formData,
-        latitude: parseFloat(formData.latitude),
-        longitude: parseFloat(formData.longitude)
-      });
+      const payload = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: formData.role,
+        address: formData.address,
+      };
+
+      if (formData.role === 'ADMIN') {
+        payload.admin_key = formData.admin_key;
+      }
+
+      await register(payload);
       navigate('/');
     } catch (err) {
       setError(err.message || 'Registration failed');
@@ -106,29 +121,62 @@ export const Register = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300">Account Type / Role</label>
+              <label className="block text-sm font-medium text-slate-300">User Account Type</label>
               <select
                 name="role"
                 value={formData.role}
                 onChange={handleChange}
                 className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded-md py-2 px-3 text-white focus:ring-emerald-500"
               >
-                <option value="BUYER">Buyer / Contractor</option>
-                <option value="SELLER">Seller / Demolition Site</option>
-                <option value="RECYCLER">Recycler</option>
-                <option value="ADMIN">Admin</option>
+                <option value="CONTRACTOR_BUILDER">Contractor / Builder (Buy & Sell Leftover Materials)</option>
+                <option value="RECYCLER">Recycler (Buy Recyclables Only)</option>
+                <option value="ADMIN">Admin (Restricted Authorization)</option>
               </select>
             </div>
+
+            {formData.role === 'ADMIN' && (
+              <div className="bg-amber-950/40 border border-amber-800/60 p-3 rounded space-y-1">
+                <label className="block text-xs font-semibold text-amber-300">Admin Secret Key</label>
+                <input
+                  type="password"
+                  name="admin_key"
+                  required
+                  placeholder="Enter administrator authorization key"
+                  value={formData.admin_key}
+                  onChange={handleChange}
+                  className="mt-1 block w-full bg-slate-800 border border-amber-700/80 rounded-md py-2 px-3 text-white text-sm focus:ring-amber-500"
+                />
+                <p className="text-xs text-amber-400/80">Admin registration is restricted and requires authorization.</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-slate-300">Address / Location</label>
               <input
                 type="text"
                 name="address"
+                placeholder="e.g. Indiranagar, Bangalore"
                 value={formData.address}
                 onChange={handleChange}
                 className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded-md py-2 px-3 text-white focus:ring-emerald-500"
               />
+            </div>
+
+            <div className="pt-2 flex items-start space-x-2">
+              <input
+                type="checkbox"
+                id="terms"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded bg-slate-800 border-slate-700 text-emerald-600 focus:ring-emerald-500"
+              />
+              <label htmlFor="terms" className="text-xs text-slate-300">
+                I agree to the{' '}
+                <Link to="/terms" target="_blank" className="text-emerald-400 underline hover:text-emerald-300 font-medium">
+                  Terms and Conditions
+                </Link>
+                {' '}(including the anti-fraud policy and instant account ban enforcement).
+              </label>
             </div>
 
             <div>
@@ -136,7 +184,7 @@ export const Register = () => {
                 type="submit"
                 className="w-full mt-2 flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
               >
-                Register
+                Register Account
               </button>
             </div>
           </form>

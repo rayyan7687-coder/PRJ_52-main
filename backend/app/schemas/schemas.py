@@ -8,8 +8,9 @@ class UserCreate(BaseModel):
     email: EmailStr
     phone: Optional[str] = None
     password: str = Field(..., min_length=6)
-    role: UserRole = UserRole.BUYER
+    role: UserRole = UserRole.CONTRACTOR_BUILDER
     address: Optional[str] = None
+    admin_key: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr

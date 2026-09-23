@@ -72,13 +72,23 @@ def create_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    listing = db.query(Listing).filter(Listing.id == report_in.listing_id).first()
-    if not listing:
-        raise HTTPException(status_code=404, detail="Listing not found")
+    if not report_in.listing_id and not report_in.reported_user_id:
+        raise HTTPException(status_code=400, detail="Either listing_id or reported_user_id must be provided")
+
+    if report_in.listing_id:
+        listing = db.query(Listing).filter(Listing.id == report_in.listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+
+    if report_in.reported_user_id:
+        user = db.query(User).filter(User.id == report_in.reported_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Reported user not found")
 
     report = Report(
         reporter_id=current_user.id,
         listing_id=report_in.listing_id,
+        reported_user_id=report_in.reported_user_id,
         reason=report_in.reason,
         description=report_in.description,
         status="PENDING"
@@ -133,16 +143,17 @@ def admin_get_reports(
 @router.put("/admin/reports/{report_id}")
 def admin_update_report(
     report_id: int,
-    status_text: str,
+    status_text: Optional[str] = "RESOLVED",
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles([UserRole.ADMIN]))
 ):
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    report.status = status_text
+    if status_text:
+        report.status = status_text
     db.commit()
-    return {"message": "Report status updated"}
+    return {"message": "Report status updated", "status": report.status}
 
 @router.put("/admin/listings/{listing_id}/hide", response_model=ListingResponse)
 def admin_hide_listing(

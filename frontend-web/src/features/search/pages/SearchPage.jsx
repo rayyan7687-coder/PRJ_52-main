@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../../services/api';
 import { ListingCard } from '../../listings/components/ListingCard';
-import { MapView } from '../../../components/Map/MapView';
+import { MapView, loadGoogleMaps } from '../../../components/Map/MapView';
 import { Search, MapPin, Filter, ArrowRight } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -10,6 +10,7 @@ export const SearchPage = () => {
   const [listings, setListings] = useState([]);
   const [categories, setCategories] = useState([]);
   const [query, setQuery] = useState('');
+  const [addressInput, setAddressInput] = useState('Bangalore, India');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedMaterialType, setSelectedMaterialType] = useState('');
   const [selectedCondition, setSelectedCondition] = useState('');
@@ -62,11 +63,32 @@ export const SearchPage = () => {
 
   useEffect(() => {
     fetchResults();
-  }, [selectedCategory, selectedMaterialType, selectedCondition, radius]);
+  }, [coords, selectedCategory, selectedMaterialType, selectedCondition, radius]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     fetchResults();
+  };
+
+  const handleAddressAutofillSearch = async () => {
+    if (!addressInput.trim()) return;
+    setLocationMessage('Searching address location on Google Maps...');
+    try {
+      const maps = await loadGoogleMaps();
+      const geocoder = new maps.Geocoder();
+      geocoder.geocode({ address: addressInput }, (results, status) => {
+        if (status === 'OK' && results && results[0]) {
+          const loc = results[0].geometry.location;
+          setCoords({ latitude: loc.lat(), longitude: loc.lng() });
+          setAddressInput(results[0].formatted_address);
+          setLocationMessage('Location set from address!');
+        } else {
+          setLocationMessage('Could not locate address.');
+        }
+      });
+    } catch (err) {
+      setLocationMessage('Geocoding service error.');
+    }
   };
 
   const useMyLocation = () => {
@@ -74,7 +96,7 @@ export const SearchPage = () => {
       setLocationMessage('This browser does not support location sharing.');
       return;
     }
-    setLocationMessage('Requesting your location…');
+    setLocationMessage('Requesting GPS location…');
     navigator.geolocation.getCurrentPosition(async ({ coords: position }) => {
       const next = { latitude: position.latitude, longitude: position.longitude };
       setCoords(next);
@@ -85,45 +107,56 @@ export const SearchPage = () => {
             body: JSON.stringify({ ...next, location_sharing_enabled: true }),
           });
           setUser(updated);
-          setLocationMessage('Your location is saved privately for nearby search.');
+          setLocationMessage('Location saved privately for search.');
         } catch (err) {
-          setLocationMessage(err.message || 'Location found, but could not be saved.');
+          setLocationMessage(err.message || 'Location found.');
         }
       } else {
-        setLocationMessage('Location is being used only for this search. Sign in to save it securely.');
+        setLocationMessage('GPS location active.');
       }
-    }, () => setLocationMessage('Location permission was not granted. You can still search using the default area.'), {
+    }, () => setLocationMessage('Location permission denied.'), {
       enableHighAccuracy: false, timeout: 10000, maximumAge: 300000,
     });
   };
 
-  const stopSavingLocation = async () => {
-    try {
-      const updated = await apiFetch('/users/me/location', {
-        method: 'PUT',
-        body: JSON.stringify({ location_sharing_enabled: false }),
-      });
-      setUser(updated);
-      setLocationMessage('Saved location removed. Nearby search can still use a temporary browser location.');
-    } catch (err) {
-      setLocationMessage(err.message || 'Could not remove the saved location.');
-    }
-  };
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
+      <div className="mb-8 space-y-4">
         <h1 className="text-3xl font-extrabold text-white mb-2">Discover Reusable & Recyclable Materials</h1>
         <p className="text-slate-400">Search materials around your demolition site or construction project radius.</p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button type="button" onClick={useMyLocation} className="inline-flex items-center gap-2 text-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white px-4 py-2 rounded-lg">
-            <MapPin className="h-4 w-4 text-emerald-400" /> Use my location
+
+        {/* Address Location Search Row */}
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col md:flex-row items-center gap-3">
+          <div className="flex-1 flex items-center space-x-2 w-full">
+            <MapPin className="h-5 w-5 text-emerald-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="Enter search city or site address (e.g. Indiranagar, Bangalore)"
+              value={addressInput}
+              onChange={(e) => setAddressInput(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-emerald-500"
+            />
+            <button
+              type="button"
+              onClick={handleAddressAutofillSearch}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg text-xs shrink-0"
+            >
+              Autofill Location
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={useMyLocation}
+            className="inline-flex items-center gap-2 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2.5 rounded-lg shrink-0 w-full md:w-auto justify-center"
+          >
+            <MapPin className="h-4 w-4 text-emerald-400" /> Use GPS Location
           </button>
-          {user?.location_sharing_enabled && <button type="button" onClick={stopSavingLocation} className="text-xs text-slate-400 hover:text-white underline">Stop saving my location</button>}
-          {locationMessage && <span className="text-xs text-slate-400">{locationMessage}</span>}
         </div>
 
-        <form onSubmit={handleSearchSubmit} className="mt-6 flex flex-col md:flex-row gap-3">
+        {locationMessage && <p className="text-xs text-emerald-400 font-medium">{locationMessage}</p>}
+
+        <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
             <input
@@ -138,7 +171,7 @@ export const SearchPage = () => {
             type="submit"
             className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-6 py-3 rounded-lg flex items-center justify-center space-x-2 transition"
           >
-            <span>Search</span>
+            <span>Search Materials</span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </form>

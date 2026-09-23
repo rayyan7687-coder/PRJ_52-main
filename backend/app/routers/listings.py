@@ -37,7 +37,7 @@ def create_category(
 def create_listing(
     listing_in: ListingCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles([UserRole.SELLER, UserRole.ADMIN]))
+    current_user: User = Depends(require_roles([UserRole.CONTRACTOR_BUILDER, UserRole.SELLER, UserRole.ADMIN]))
 ):
     category = db.query(Category).filter(Category.id == listing_in.category_id).first()
     if not category:

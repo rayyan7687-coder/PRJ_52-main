@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../../services/api';
 import { useAuth } from '../../auth/AuthContext';
-import { MapPin, Phone, MessageSquare, CheckCircle, Heart, ArrowLeft, User } from 'lucide-react';
+import { MapPin, Phone, MessageSquare, CheckCircle, Heart, ArrowLeft, User, AlertTriangle, X } from 'lucide-react';
 
 export const ListingDetailsPage = () => {
   const { id } = useParams();
@@ -14,6 +14,12 @@ export const ListingDetailsPage = () => {
   const [error, setError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
   const [isFavorited, setIsFavorited] = useState(false);
+
+  // Report Modal State
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('Fraudulent Case / Fake Listing');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchListing = async () => {
@@ -82,6 +88,32 @@ export const ListingDetailsPage = () => {
       setActionMessage('Listing marked as sold!');
     } catch (err) {
       setActionMessage(err.message || 'Failed to mark listing as sold');
+    }
+  };
+
+  const handleSubmitReport = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    setReportSubmitting(true);
+    try {
+      await apiFetch('/reports', {
+        method: 'POST',
+        body: JSON.stringify({
+          listing_id: listing.id,
+          reported_user_id: listing.seller_id,
+          reason: reportReason,
+          description: reportDescription
+        })
+      });
+      setShowReportModal(false);
+      setActionMessage('Report submitted to administrator for moderation.');
+    } catch (err) {
+      alert(err.message || 'Failed to submit report');
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -219,12 +251,83 @@ export const ListingDetailsPage = () => {
                     <Phone className="h-5 w-5 text-emerald-400" />
                     <span>Call Seller</span>
                   </a>
+
+                  {/* Requirement 2: Add report user/listing feature */}
+                  <button
+                    onClick={() => setShowReportModal(true)}
+                    className="w-full bg-red-950/60 hover:bg-red-900/80 border border-red-800/80 text-red-300 text-xs font-semibold py-2.5 rounded-lg flex items-center justify-center space-x-1.5 transition mt-2"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-red-400" />
+                    <span>Report Fraudulent Case / User</span>
+                  </button>
                 </>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                <AlertTriangle className="h-5 w-5 text-red-400" />
+                <span>Report Fraudulent Case</span>
+              </h3>
+              <button onClick={() => setShowReportModal(false)} className="text-slate-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitReport} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Reason for Report</label>
+                <select
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded py-2 px-3 text-white text-sm focus:ring-red-500"
+                >
+                  <option value="Fraudulent Case / Fake Listing">Fraudulent Case / Fake Listing</option>
+                  <option value="Misleading Description / False Quality">Misleading Description / False Quality</option>
+                  <option value="Unreachable or Suspicious Seller">Unreachable or Suspicious Seller</option>
+                  <option value="Prohibited or Illegal Material">Prohibited or Illegal Material</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Details & Description</label>
+                <textarea
+                  rows="3"
+                  required
+                  placeholder="Provide specific details about the fraud or suspicion..."
+                  value={reportDescription}
+                  onChange={(e) => setReportDescription(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded py-2 px-3 text-white text-sm focus:ring-red-500"
+                ></textarea>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReportModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-4 py-2 rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={reportSubmitting}
+                  className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded flex items-center space-x-1"
+                >
+                  <span>{reportSubmitting ? 'Submitting...' : 'Submit Fraud Report'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -17,11 +17,19 @@ export const AuthProvider = ({ children }) => {
         } catch (err) {
           console.error('Failed to load user session:', err);
           localStorage.removeItem('token');
+          setUser(null);
         }
       }
       setLoading(false);
     };
     fetchUser();
+
+    const handleAuthLogout = () => {
+      localStorage.removeItem('token');
+      setUser(null);
+    };
+    window.addEventListener('auth:logout', handleAuthLogout);
+    return () => window.removeEventListener('auth:logout', handleAuthLogout);
   }, []);
 
   const login = async (email, password) => {

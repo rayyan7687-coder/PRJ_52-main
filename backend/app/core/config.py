@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
 
+    ADMIN_EMAIL: str = "admin@buildloop.com"
+    ADMIN_REGISTRATION_KEY: str = "admin-secret-key-123"
+
     # SQLite is convenient locally. Production must use PostgreSQL.
     DATABASE_URL: str = "sqlite:///./buildloop.db"
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
