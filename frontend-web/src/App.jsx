@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Navbar } from './components/Navbar/Navbar';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './features/auth/pages/Login';
 import { Register } from './features/auth/pages/Register';
 import { HomePage } from './features/home/pages/HomePage';
@@ -24,11 +25,47 @@ export const App = () => {
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/listings/:id" element={<ListingDetailsPage />} />
-        <Route path="/seller/create" element={<CreateListingPage />} />
-        <Route path="/seller/dashboard" element={<SellerDashboard />} />
-        <Route path="/recycler" element={<RecyclerPage />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/admin" element={<AdminPage />} />
+
+        <Route
+          path="/seller/create"
+          element={
+            <ProtectedRoute allowedRoles={['SELLER', 'CONTRACTOR_BUILDER', 'ADMIN']}>
+              <CreateListingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/seller/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['SELLER', 'CONTRACTOR_BUILDER', 'ADMIN']}>
+              <SellerDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/recycler"
+          element={
+            <ProtectedRoute allowedRoles={['RECYCLER', 'ADMIN']}>
+              <RecyclerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <AdminPage />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </div>
   );

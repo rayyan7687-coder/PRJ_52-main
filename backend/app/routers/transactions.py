@@ -20,6 +20,12 @@ def create_transaction(
     listing = db.query(Listing).filter(Listing.id == tx_in.listing_id).first()
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
+    if not listing.is_visible or listing.status != ListingStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Listing is not active or available for transaction")
+    if listing.seller_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Seller cannot create a transaction for their own listing")
+    if tx_in.agreed_price <= 0:
+        raise HTTPException(status_code=400, detail="Agreed price must be greater than zero")
 
     tx = Transaction(
         listing_id=listing.id,
@@ -35,12 +41,14 @@ def create_transaction(
 
 @router.get("/transactions", response_model=List[TransactionResponse])
 def get_user_transactions(
+    limit: int = 20,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     return db.query(Transaction).filter(
         (Transaction.buyer_id == current_user.id) | (Transaction.seller_id == current_user.id)
-    ).order_by(Transaction.created_at.desc()).all()
+    ).order_by(Transaction.created_at.desc()).offset(offset).limit(limit).all()
 
 @router.put("/transactions/{transaction_id}", response_model=TransactionResponse)
 def update_transaction(
@@ -52,15 +60,44 @@ def update_transaction(
     tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not tx:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    if tx.seller_id != current_user.id and tx.buyer_id != current_user.id and current_user.role != UserRole.ADMIN:
+
+    is_seller = (tx.seller_id == current_user.id)
+    is_buyer = (tx.buyer_id == current_user.id)
+    is_admin = (current_user.role == UserRole.ADMIN)
+
+    if not (is_seller or is_buyer or is_admin):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    tx.status = tx_update.status
-    if tx_update.status == TransactionStatus.COMPLETED:
+    new_status = tx_update.status
+    current_status = tx.status
+
+    # Validate state transitions and permissions
+    if current_status == TransactionStatus.COMPLETED and new_status != TransactionStatus.COMPLETED:
+        raise HTTPException(status_code=400, detail="Completed transactions cannot be altered")
+
+    if is_buyer and not is_admin:
+        if new_status != TransactionStatus.CANCELLED:
+            raise HTTPException(status_code=403, detail="Buyers can only cancel their pending transaction requests")
+        if current_status not in [TransactionStatus.PENDING, TransactionStatus.RESERVED]:
+            raise HTTPException(status_code=400, detail="Cannot cancel transaction in its current state")
+
+    if is_seller and not is_admin:
+        if current_status == TransactionStatus.PENDING and new_status not in [TransactionStatus.RESERVED, TransactionStatus.COMPLETED, TransactionStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail="Invalid status transition from PENDING")
+        if current_status == TransactionStatus.RESERVED and new_status not in [TransactionStatus.COMPLETED, TransactionStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail="Invalid status transition from RESERVED")
+
+    tx.status = new_status
+    if new_status == TransactionStatus.RESERVED:
+        tx.listing.status = ListingStatus.RESERVED
+    elif new_status == TransactionStatus.COMPLETED:
         tx.completed_at = datetime.now(timezone.utc)
         tx.listing.status = ListingStatus.SOLD
         tx.listing.sold_at = datetime.now(timezone.utc)
         tx.listing.is_visible = False
+    elif new_status == TransactionStatus.CANCELLED:
+        if tx.listing.status == ListingStatus.RESERVED:
+            tx.listing.status = ListingStatus.ACTIVE
 
     db.commit()
     db.refresh(tx)
@@ -100,10 +137,12 @@ def create_report(
 
 @router.get("/admin/users", response_model=List[UserResponse])
 def admin_get_users(
+    limit: int = 50,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles([UserRole.ADMIN]))
 ):
-    return db.query(User).all()
+    return db.query(User).offset(offset).limit(limit).all()
 
 @router.put("/admin/users/{user_id}/block", response_model=UserResponse)
 def admin_block_user(
@@ -135,10 +174,12 @@ def admin_unblock_user(
 
 @router.get("/admin/reports", response_model=List[ReportResponse])
 def admin_get_reports(
+    limit: int = 50,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles([UserRole.ADMIN]))
 ):
-    return db.query(Report).order_by(Report.created_at.desc()).all()
+    return db.query(Report).order_by(Report.created_at.desc()).offset(offset).limit(limit).all()
 
 @router.put("/admin/reports/{report_id}")
 def admin_update_report(

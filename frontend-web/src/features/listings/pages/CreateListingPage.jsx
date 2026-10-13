@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Upload, MapPin, Check, ArrowRight, ArrowLeft, X, Search, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Camera, Upload, MapPin, ArrowRight, ArrowLeft, X, Search, Image as ImageIcon } from 'lucide-react';
 import { MapView, loadGoogleMaps } from '../../../components/Map/MapView';
 
 // Utility to compress image to base64 Data URL
@@ -88,7 +88,6 @@ export const CreateListingPage = () => {
     setFormData({ ...formData, [e.target.name]: value });
   };
 
-  // Image Upload and Camera Capture Handler
   const handlePhotoFiles = async (filesList) => {
     const files = Array.from(filesList || []);
     if (files.length === 0) return;
@@ -128,7 +127,6 @@ export const CreateListingPage = () => {
     }));
   };
 
-  // Address Geocoding and Location Selection
   const handleAddressAutofill = async () => {
     if (!formData.location_text.trim()) return;
     setGeocodingMsg('Locating site address on Google Maps...');
@@ -149,7 +147,7 @@ export const CreateListingPage = () => {
           setGeocodingMsg('Address not found automatically. Click on the map below to pinpoint site.');
         }
       });
-    } catch (err) {
+    } catch {
       setGeocodingMsg('Geocoding service unavailable. Click on the map below to pinpoint site.');
     }
   };
@@ -352,7 +350,6 @@ export const CreateListingPage = () => {
 
         {step === 2 && (
           <div className="space-y-6">
-            {/* Requirement 6: Photo Upload & Camera Capture Zone */}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1 flex items-center space-x-2">
                 <ImageIcon className="h-4 w-4 text-emerald-400" />
@@ -362,7 +359,6 @@ export const CreateListingPage = () => {
                 Please upload or capture real site photographs. URL text inputs have been removed.
               </p>
 
-              {/* Hidden File Inputs */}
               <input
                 type="file"
                 accept="image/*"
@@ -380,7 +376,6 @@ export const CreateListingPage = () => {
                 className="hidden"
               />
 
-              {/* Dropzone & Action Buttons */}
               <div
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
@@ -410,7 +405,6 @@ export const CreateListingPage = () => {
                 </p>
               </div>
 
-              {/* Photos Gallery Preview */}
               {formData.images.length > 0 && (
                 <div className="mt-4 space-y-2">
                   <span className="text-xs font-semibold text-slate-400 block">Attached Site Photographs ({formData.images.length})</span>
@@ -438,7 +432,6 @@ export const CreateListingPage = () => {
               )}
             </div>
 
-            {/* Requirement 4: Site Location & Address Autofill */}
             <div className="pt-6 border-t border-slate-800 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300">Site Pickup Address</label>

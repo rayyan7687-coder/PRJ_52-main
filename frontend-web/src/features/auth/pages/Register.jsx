@@ -9,8 +9,7 @@ export const Register = () => {
     phone: '',
     password: '',
     role: 'CONTRACTOR_BUILDER',
-    address: 'Bangalore, India',
-    admin_key: ''
+    address: 'Bangalore, India'
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState('');
@@ -39,10 +38,6 @@ export const Register = () => {
         role: formData.role,
         address: formData.address,
       };
-
-      if (formData.role === 'ADMIN') {
-        payload.admin_key = formData.admin_key;
-      }
 
       await register(payload);
       navigate('/');
@@ -130,25 +125,8 @@ export const Register = () => {
               >
                 <option value="CONTRACTOR_BUILDER">Contractor / Builder (Buy & Sell Leftover Materials)</option>
                 <option value="RECYCLER">Recycler (Buy Recyclables Only)</option>
-                <option value="ADMIN">Admin (Restricted Authorization)</option>
               </select>
             </div>
-
-            {formData.role === 'ADMIN' && (
-              <div className="bg-amber-950/40 border border-amber-800/60 p-3 rounded space-y-1">
-                <label className="block text-xs font-semibold text-amber-300">Admin Secret Key</label>
-                <input
-                  type="password"
-                  name="admin_key"
-                  required
-                  placeholder="Enter administrator authorization key"
-                  value={formData.admin_key}
-                  onChange={handleChange}
-                  className="mt-1 block w-full bg-slate-800 border border-amber-700/80 rounded-md py-2 px-3 text-white text-sm focus:ring-amber-500"
-                />
-                <p className="text-xs text-amber-400/80">Admin registration is restricted and requires authorization.</p>
-              </div>
-            )}
 
             <div>
               <label className="block text-sm font-medium text-slate-300">Address / Location</label>

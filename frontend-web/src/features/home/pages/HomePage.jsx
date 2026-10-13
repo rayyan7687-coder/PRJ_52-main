@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../../services/api';
 import { ListingCard } from '../../listings/components/ListingCard';
 import { useAuth } from '../../auth/AuthContext';
-import { Building2, Search, Recycle, MapPin, ArrowRight, ShieldCheck, Factory, PlusCircle } from 'lucide-react';
+import { Building2, Search, Recycle, ArrowRight, ShieldCheck, Factory, PlusCircle } from 'lucide-react';
 
 export const HomePage = () => {
   const { user } = useAuth();

@@ -3,9 +3,8 @@ import React, { useEffect, useRef, useState } from 'react';
 let mapsLoader;
 const escapeMapText = (value) => String(value ?? '').replace(/[<>&"']/g, '');
 
-const DEFAULT_MAPS_KEY = 'AIzaSyAHQoiQWaoWDFL06WH4zlaJueUzh-srPOI';
-
-export function loadGoogleMaps(apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_MAPS_KEY) {
+export function loadGoogleMaps(apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
+  if (!apiKey) return Promise.reject(new Error('Google Maps API key is missing.'));
   if (window.google?.maps) return Promise.resolve(window.google.maps);
   if (mapsLoader) return mapsLoader;
   mapsLoader = new Promise((resolve, reject) => {
@@ -22,7 +21,7 @@ export function loadGoogleMaps(apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 export const MapView = ({ listings = [], userLocation, onLocationSelect, height = '24rem' }) => {
   const containerRef = useRef(null);
   const [error, setError] = useState('');
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_MAPS_KEY;
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const center = userLocation || { latitude: 12.9716, longitude: 77.5946 };
 
   useEffect(() => {
@@ -67,9 +66,12 @@ export const MapView = ({ listings = [], userLocation, onLocationSelect, height 
   }, [apiKey, center.latitude, center.longitude, listings, onLocationSelect]);
 
   if (!apiKey) {
-    return <div className="bg-slate-900 border border-amber-700/60 rounded-lg p-5 text-amber-200 text-sm">
-      Add <code>VITE_GOOGLE_MAPS_API_KEY</code> to <code>frontend-web/.env</code> to display the live Google map.
-    </div>;
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 text-center text-slate-400 text-sm">
+        <p className="font-semibold text-slate-300 mb-1">Map View Unavailable</p>
+        <p>Set <code className="text-emerald-400">VITE_GOOGLE_MAPS_API_KEY</code> in environment variables to enable Google Maps.</p>
+      </div>
+    );
   }
   if (error) return <div className="bg-slate-900 border border-red-800 rounded-lg p-5 text-red-200 text-sm">{error}</div>;
   return <div ref={containerRef} className="rounded-lg overflow-hidden border border-slate-800 shadow-xl" style={{ height }} />;

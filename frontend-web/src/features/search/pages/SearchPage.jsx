@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../services/api';
 import { ListingCard } from '../../listings/components/ListingCard';
 import { MapView, loadGoogleMaps } from '../../../components/Map/MapView';
@@ -33,7 +33,7 @@ export const SearchPage = () => {
     loadCategories();
   }, []);
 
-  const fetchResults = async () => {
+  const fetchResults = useCallback(async () => {
     setLoading(true);
     try {
       let endpoint = `/search/nearby?latitude=${coords.latitude}&longitude=${coords.longitude}&radius=${radius}`;
@@ -59,11 +59,11 @@ export const SearchPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [coords.latitude, coords.longitude, radius, selectedCategory, selectedMaterialType, selectedCondition, query]);
 
   useEffect(() => {
     fetchResults();
-  }, [coords, selectedCategory, selectedMaterialType, selectedCondition, radius]);
+  }, [fetchResults]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -86,7 +86,7 @@ export const SearchPage = () => {
           setLocationMessage('Could not locate address.');
         }
       });
-    } catch (err) {
+    } catch {
       setLocationMessage('Geocoding service error.');
     }
   };
