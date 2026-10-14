@@ -1,4 +1,5 @@
 from typing import List
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
 from app.db.database import get_db, SessionLocal
@@ -43,12 +44,14 @@ def create_conversation(
 
 @router.get("/conversations", response_model=List[ConversationResponse])
 def get_user_conversations(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     convs = db.query(Conversation).filter(
         (Conversation.buyer_id == current_user.id) | (Conversation.seller_id == current_user.id)
-    ).order_by(Conversation.created_at.desc()).all()
+    ).order_by(Conversation.created_at.desc()).offset(offset).limit(limit).all()
 
     for conv in convs:
         last_msg = db.query(Message).filter(Message.conversation_id == conv.id).order_by(Message.created_at.desc()).first()
@@ -59,6 +62,8 @@ def get_user_conversations(
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
 def get_conversation_messages(
     conversation_id: int,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -68,7 +73,6 @@ def get_conversation_messages(
     if conv.buyer_id != current_user.id and conv.seller_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view these messages")
 
-    # Mark unread messages as read FIRST before querying return list
     db.query(Message).filter(
         Message.conversation_id == conversation_id,
         Message.sender_id != current_user.id,
@@ -76,11 +80,11 @@ def get_conversation_messages(
     ).update({"is_read": True})
     db.commit()
 
-    messages = db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at.asc()).all()
+    messages = db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at.asc()).offset(offset).limit(limit).all()
     return messages
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
-def send_message(
+async def send_message(
     conversation_id: int,
     msg_in: MessageCreate,
     db: Session = Depends(get_db),
@@ -92,6 +96,9 @@ def send_message(
     if conv.buyer_id != current_user.id and conv.seller_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    if len(msg_in.message) > 2000:
+        raise HTTPException(status_code=400, detail="Message exceeds maximum length of 2000 characters")
+
     msg = Message(
         conversation_id=conversation_id,
         sender_id=current_user.id,
@@ -101,6 +108,16 @@ def send_message(
     db.add(msg)
     db.commit()
     db.refresh(msg)
+
+    msg_data = {
+        "id": msg.id,
+        "conversation_id": conversation_id,
+        "sender_id": current_user.id,
+        "message": msg.message,
+        "created_at": msg.created_at.isoformat()
+    }
+    await manager.broadcast_to_conversation(conversation_id, msg_data)
+
     return msg
 
 @router.websocket("/ws/chat/{conversation_id}")
@@ -117,18 +134,27 @@ async def websocket_chat(websocket: WebSocket, conversation_id: int, token: str 
 
     user_id = int(sub)
 
-    db = SessionLocal()
-    try:
+    # Initial authorization check without holding session
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not user.is_active:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
         conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
         if not conv or (conv.buyer_id != user_id and conv.seller_id != user_id):
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        await manager.connect(conversation_id, websocket)
+    await manager.connect(conversation_id, websocket)
 
-        try:
-            while True:
-                data = await websocket.receive_text()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if not data or len(data) > 2000:
+                continue
+
+            with SessionLocal() as db:
                 msg = Message(
                     conversation_id=conversation_id,
                     sender_id=user_id,
@@ -138,16 +164,16 @@ async def websocket_chat(websocket: WebSocket, conversation_id: int, token: str 
                 db.add(msg)
                 db.commit()
                 db.refresh(msg)
+                msg_id = msg.id
+                msg_created = msg.created_at.isoformat()
 
-                msg_data = {
-                    "id": msg.id,
-                    "conversation_id": conversation_id,
-                    "sender_id": user_id,
-                    "message": data,
-                    "created_at": msg.created_at.isoformat()
-                }
-                await manager.broadcast_to_conversation(conversation_id, msg_data)
-        except WebSocketDisconnect:
-            manager.disconnect(conversation_id, websocket)
-    finally:
-        db.close()
+            msg_data = {
+                "id": msg_id,
+                "conversation_id": conversation_id,
+                "sender_id": user_id,
+                "message": data,
+                "created_at": msg_created
+            }
+            await manager.broadcast_to_conversation(conversation_id, msg_data)
+    except WebSocketDisconnect:
+        manager.disconnect(conversation_id, websocket)

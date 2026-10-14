@@ -4,6 +4,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.db.database import Base, get_db
+from app.models.models import User, UserRole
+from app.core.security import get_password_hash
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_auth.db"
 
@@ -20,6 +22,19 @@ def override_get_db():
 @pytest.fixture(autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+    # Seed an admin user directly
+    admin = User(
+        name="Admin User",
+        email="admin@example.com",
+        password_hash=get_password_hash("password123"),
+        role=UserRole.ADMIN,
+        is_active=True,
+        is_verified=True
+    )
+    db.add(admin)
+    db.commit()
+    db.close()
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -35,7 +50,7 @@ def test_register_and_login(client):
         "/api/v1/auth/register",
         json={
             "name": "Test Seller",
-            "email": "seller@example.com",
+            "email": "SELLER@EXAMPLE.COM",
             "password": "password123",
             "role": "SELLER",
             "latitude": 12.9716,
@@ -54,6 +69,7 @@ def test_register_and_login(client):
     assert login_response.status_code == 200
     token_data = login_response.json()
     assert "access_token" in token_data
+    assert "refresh_token" in login_response.cookies
 
     token = token_data["access_token"]
     me_response = client.get(
@@ -63,8 +79,7 @@ def test_register_and_login(client):
     assert me_response.status_code == 200
     assert me_response.json()["name"] == "Test Seller"
 
-def test_admin_registration_restriction(client):
-    # Registration with ADMIN role without secret key should fail
+def test_admin_registration_disabled(client):
     fail_response = client.post(
         "/api/v1/auth/register",
         json={
@@ -76,22 +91,8 @@ def test_admin_registration_restriction(client):
     )
     assert fail_response.status_code == 403
 
-    # Registration with ADMIN role with correct key should succeed
-    success_response = client.post(
-        "/api/v1/auth/register",
-        json={
-            "name": "Authorized Admin",
-            "email": "goodadmin@example.com",
-            "password": "password123",
-            "role": "ADMIN",
-            "admin_key": "admin-secret-key-123"
-        }
-    )
-    assert success_response.status_code == 201
-
 def test_blocked_user_login(client):
-    # Register user
-    client.post(
+    reg_res = client.post(
         "/api/v1/auth/register",
         json={
             "name": "Blocked User",
@@ -100,33 +101,19 @@ def test_blocked_user_login(client):
             "role": "CONTRACTOR_BUILDER"
         }
     )
-    # Register admin
-    admin_reg = client.post(
-        "/api/v1/auth/register",
-        json={
-            "name": "Admin",
-            "email": "admin@example.com",
-            "password": "password123",
-            "role": "ADMIN",
-            "admin_key": "admin-secret-key-123"
-        }
-    )
-    admin_id = admin_reg.json()["id"]
+    user_id = reg_res.json()["id"]
 
-    # Login as admin
     admin_login = client.post(
         "/api/v1/auth/login",
         json={"email": "admin@example.com", "password": "password123"}
     )
     admin_token = admin_login.json()["access_token"]
 
-    # Admin blocks user
     client.put(
-        "/api/v1/admin/users/1/block",
+        f"/api/v1/admin/users/{user_id}/block",
         headers={"Authorization": f"Bearer {admin_token}"}
     )
 
-    # Blocked user attempts login
     blocked_login = client.post(
         "/api/v1/auth/login",
         json={"email": "blocked@example.com", "password": "password123"}

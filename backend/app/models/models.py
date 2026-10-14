@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, ForeignKey, Text, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
@@ -51,8 +51,6 @@ class User(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     address = Column(String(255), nullable=True)
-    # A user's live/browser location is private and is only retained after an
-    # explicit opt-in. Listing locations remain separate, public pickup sites.
     location_sharing_enabled = Column(Boolean, default=False, nullable=False)
     location_updated_at = Column(DateTime, nullable=True)
     is_verified = Column(Boolean, default=False)
@@ -78,10 +76,14 @@ class Category(Base):
 
 class Listing(Base):
     __tablename__ = "listings"
+    __table_args__ = (
+        Index("idx_listing_status_visible_created", "status", "is_visible", "created_at"),
+        Index("idx_listing_lat_lng", "latitude", "longitude"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    seller_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    seller_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), index=True, nullable=False)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
     material_type = Column(Enum(MaterialType), nullable=False, default=MaterialType.REUSABLE)
@@ -90,6 +92,7 @@ class Listing(Base):
     condition = Column(Enum(ListingCondition), nullable=False, default=ListingCondition.GOOD)
     grade = Column(Enum(ListingGrade), nullable=True, default=ListingGrade.B)
     price = Column(Float, nullable=False)
+    currency = Column(String(10), default="INR", nullable=False)
     is_negotiable = Column(Boolean, default=True)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
@@ -112,8 +115,9 @@ class ListingImage(Base):
     __tablename__ = "listing_images"
 
     id = Column(Integer, primary_key=True, index=True)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False)
+    listing_id = Column(Integer, ForeignKey("listings.id"), index=True, nullable=False)
     image_url = Column(Text, nullable=False)
+    thumbnail_url = Column(Text, nullable=True)
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -121,11 +125,14 @@ class ListingImage(Base):
 
 class Conversation(Base):
     __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint("listing_id", "buyer_id", "seller_id", name="uq_conversation_listing_buyer_seller"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False)
-    buyer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    seller_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    listing_id = Column(Integer, ForeignKey("listings.id"), index=True, nullable=False)
+    buyer_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    seller_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     listing = relationship("Listing", back_populates="conversations")
@@ -137,8 +144,8 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
-    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), index=True, nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     message = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -150,10 +157,11 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False)
-    seller_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    buyer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    listing_id = Column(Integer, ForeignKey("listings.id"), index=True, nullable=False)
+    seller_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    buyer_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     agreed_price = Column(Float, nullable=False)
+    currency = Column(String(10), default="INR", nullable=False)
     status = Column(Enum(TransactionStatus), default=TransactionStatus.PENDING, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
@@ -164,10 +172,13 @@ class Transaction(Base):
 
 class Favorite(Base):
     __tablename__ = "favorites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "listing_id", name="uq_favorite_user_listing"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    listing_id = Column(Integer, ForeignKey("listings.id"), index=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="favorites")
@@ -177,8 +188,8 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    listing_id = Column(Integer, ForeignKey("listings.id"), index=True, nullable=True)
     type = Column(String(50), nullable=False)
     title = Column(String(200), nullable=False)
     message = Column(Text, nullable=False)
@@ -192,9 +203,9 @@ class Report(Base):
     __tablename__ = "reports"
 
     id = Column(Integer, primary_key=True, index=True)
-    reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=True)
-    reported_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reporter_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    listing_id = Column(Integer, ForeignKey("listings.id"), index=True, nullable=True)
+    reported_user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=True)
     reason = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     status = Column(String(50), default="PENDING")

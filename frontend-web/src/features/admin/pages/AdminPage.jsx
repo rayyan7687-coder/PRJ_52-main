@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../services/api';
 import {
-  Shield, UserX, UserCheck, AlertTriangle, EyeOff, CheckCircle2,
-  Users, Package, AlertCircle, FileText, Filter, Check, X, Search
+  Shield, UserX, UserCheck, AlertTriangle, EyeOff,
+  Users, Package, AlertCircle, Check, Search
 } from 'lucide-react';
 
 export const AdminPage = () => {
@@ -206,7 +206,7 @@ export const AdminPage = () => {
                       </div>
 
                       <p className="text-slate-300 text-sm bg-slate-900/80 p-3.5 rounded-lg border border-slate-800/80 leading-relaxed">
-                        "{r.description || 'No additional fraud description provided by reporter.'}"
+                        &quot;{r.description || 'No additional fraud description provided by reporter.'}&quot;
                       </p>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-400 pt-2">

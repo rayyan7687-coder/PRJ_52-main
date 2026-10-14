@@ -1,17 +1,16 @@
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from app.models.models import UserRole, MaterialType, ListingCondition, ListingGrade, ListingStatus
 
 class CategoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     material_type: MaterialType
     description: Optional[str] = None
     is_active: bool
-
-    class Config:
-        from_attributes = True
 
 class CategoryCreate(BaseModel):
     name: str
@@ -20,17 +19,18 @@ class CategoryCreate(BaseModel):
 
 class ListingImageCreate(BaseModel):
     image_url: str
+    thumbnail_url: Optional[str] = None
     sort_order: Optional[int] = 0
 
 class ListingImageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     listing_id: int
     image_url: str
+    thumbnail_url: Optional[str] = None
     sort_order: int
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class ListingCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
@@ -42,6 +42,7 @@ class ListingCreate(BaseModel):
     condition: ListingCondition = ListingCondition.GOOD
     grade: Optional[ListingGrade] = ListingGrade.B
     price: float = Field(..., ge=0)
+    currency: str = "INR"
     is_negotiable: bool = True
     latitude: float
     longitude: float
@@ -57,23 +58,24 @@ class ListingUpdate(BaseModel):
     condition: Optional[ListingCondition] = None
     grade: Optional[ListingGrade] = None
     price: Optional[float] = None
+    currency: Optional[str] = "INR"
     is_negotiable: Optional[bool] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     location_text: Optional[str] = None
-    status: Optional[ListingStatus] = None
 
 class SellerSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
-    email: str
+    email: Optional[str] = None
     phone: Optional[str] = None
     is_verified: bool
 
-    class Config:
-        from_attributes = True
-
 class ListingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     seller_id: int
     category_id: int
@@ -85,6 +87,7 @@ class ListingResponse(BaseModel):
     condition: ListingCondition
     grade: Optional[ListingGrade] = None
     price: float
+    currency: str = "INR"
     is_negotiable: bool
     latitude: float
     longitude: float
@@ -100,6 +103,3 @@ class ListingResponse(BaseModel):
     seller: SellerSummaryResponse
     images: List[ListingImageResponse] = []
     distance_km: Optional[float] = None
-
-    class Config:
-        from_attributes = True

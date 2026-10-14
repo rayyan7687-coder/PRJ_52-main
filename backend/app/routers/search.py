@@ -11,17 +11,20 @@ router = APIRouter(tags=["Search & Location & Notifications"])
 
 @router.get("/search", response_model=List[ListingResponse])
 def search_listings(
-    q: Optional[str] = None,
+    q: Optional[str] = Query(None, max_length=100),
     category_id: Optional[int] = None,
     material_type: Optional[MaterialType] = None,
     condition: Optional[ListingCondition] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db)
 ):
     query = db.query(Listing).filter(Listing.is_visible == True, Listing.status == ListingStatus.ACTIVE)
     if q:
-        search_filter = f"%{q}%"
+        clean_q = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        search_filter = f"%{clean_q}%"
         query = query.filter(
             (Listing.title.ilike(search_filter)) |
             (Listing.description.ilike(search_filter)) |
@@ -38,7 +41,7 @@ def search_listings(
     if max_price is not None:
         query = query.filter(Listing.price <= max_price)
 
-    return query.order_by(Listing.created_at.desc()).all()
+    return query.order_by(Listing.created_at.desc()).offset(offset).limit(limit).all()
 
 @router.get("/search/nearby", response_model=List[ListingResponse])
 def search_nearby(
@@ -47,6 +50,8 @@ def search_nearby(
     radius: float = Query(20.0, description="Radius in kilometers"),
     category_id: Optional[int] = None,
     material_type: Optional[MaterialType] = None,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db)
 ):
     query = db.query(Listing).filter(Listing.is_visible == True, Listing.status == ListingStatus.ACTIVE)
@@ -65,11 +70,13 @@ def search_nearby(
             nearby_results.append(listing)
 
     nearby_results.sort(key=lambda x: x.distance_km if x.distance_km is not None else 999999)
-    return nearby_results
+    return nearby_results[offset : offset + limit]
 
 @router.get("/matches", response_model=List[ListingResponse])
 def get_user_matches(
     radius: float = Query(20.0),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -90,14 +97,16 @@ def get_user_matches(
             matches.append(listing)
 
     matches.sort(key=lambda x: x.distance_km if x.distance_km is not None else 999999)
-    return matches
+    return matches[offset : offset + limit]
 
 @router.get("/notifications")
 def get_notifications(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).all()
+    return db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).offset(offset).limit(limit).all()
 
 @router.post("/notifications/{notification_id}/read")
 def mark_notification_read(

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../services/api';
 import { ListingCard } from '../../listings/components/ListingCard';
-import { Recycle, MapPin, Truck, Factory } from 'lucide-react';
+import { Recycle, Truck, Factory } from 'lucide-react';
 
 export const RecyclerPage = () => {
   const [recyclables, setRecyclables] = useState([]);
