@@ -32,13 +32,11 @@ def get_optional_current_user(request: Request, db: Session) -> Optional[User]:
 def sanitize_listing_response(listing: Listing, viewer: Optional[User], db: Session) -> ListingResponse:
     listing_resp = ListingResponse.model_validate(listing)
 
-    # Determine if viewer is authorized to see full contact details
     can_see_contact = False
     if viewer:
         if viewer.id == listing.seller_id or viewer.role == UserRole.ADMIN:
             can_see_contact = True
         else:
-            # Check for existing conversation or transaction
             has_conv = db.query(Conversation).filter(
                 Conversation.listing_id == listing.id,
                 (Conversation.buyer_id == viewer.id) | (Conversation.seller_id == viewer.id)
@@ -75,6 +73,17 @@ def create_category(
     db.commit()
     db.refresh(category)
     return category
+
+# Admin Listing Management Endpoint
+@router.get("/admin/listings", response_model=List[ListingResponse])
+def admin_get_all_listings(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles([UserRole.ADMIN]))
+):
+    listings = db.query(Listing).order_by(Listing.created_at.desc()).offset(offset).limit(limit).all()
+    return [sanitize_listing_response(lst, current_user, db) for lst in listings]
 
 # Listing Endpoints
 @router.post("/listings", response_model=ListingResponse, status_code=status.HTTP_201_CREATED)
@@ -117,15 +126,23 @@ def get_listings(
     condition: Optional[ListingCondition] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
-    status_filter: Optional[ListingStatus] = Query(ListingStatus.ACTIVE, alias="status"),
-    limit: int = 20,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    limit: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db)
 ):
     viewer = get_optional_current_user(request, db)
     query = db.query(Listing).filter(Listing.is_visible == True)
+
     if status_filter:
-        query = query.filter(Listing.status == status_filter)
+        try:
+            enum_status = ListingStatus(status_filter.upper())
+            query = query.filter(Listing.status == enum_status)
+        except ValueError:
+            pass
+    else:
+        query = query.filter(Listing.status == ListingStatus.ACTIVE)
+
     if category_id:
         query = query.filter(Listing.category_id == category_id)
     if material_type:
