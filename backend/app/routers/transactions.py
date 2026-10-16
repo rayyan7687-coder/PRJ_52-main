@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Transaction, Listing, User, TransactionStatus, Report, ListingStatus, UserRole
+from app.models.models import Transaction, Listing, User, TransactionStatus, Report, ListingStatus, UserRole, Conversation
 from app.schemas.chat import TransactionCreate, TransactionUpdate, TransactionResponse, ReportCreate, ReportResponse
 from app.schemas.schemas import UserResponse
 from app.schemas.listing import ListingResponse
@@ -71,7 +71,6 @@ def update_transaction(
     new_status = tx_update.status
     current_status = tx.status
 
-    # Validate state transitions and permissions
     if current_status == TransactionStatus.COMPLETED and new_status != TransactionStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Completed transactions cannot be altered")
 
@@ -209,3 +208,38 @@ def admin_hide_listing(
     db.commit()
     db.refresh(listing)
     return listing
+
+@router.get("/admin/stats")
+def admin_get_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles([UserRole.ADMIN]))
+):
+    completed_txs = db.query(Transaction).filter(Transaction.status == TransactionStatus.COMPLETED).all()
+    total_sales_count = len(completed_txs)
+    total_sales_volume = sum(tx.agreed_price for tx in completed_txs)
+
+    active_listings_count = db.query(Listing).filter(Listing.status == ListingStatus.ACTIVE, Listing.is_visible == True).count()
+    sold_listings_count = db.query(Listing).filter(Listing.status == ListingStatus.SOLD).count()
+    reserved_listings_count = db.query(Listing).filter(Listing.status == ListingStatus.RESERVED).count()
+    total_listings_count = db.query(Listing).count()
+
+    total_users_count = db.query(User).count()
+    buyers_count = db.query(User).filter(User.role.in_([UserRole.BUYER, UserRole.CONTRACTOR_BUILDER])).count()
+    sellers_count = db.query(User).filter(User.role.in_([UserRole.SELLER, UserRole.CONTRACTOR_BUILDER])).count()
+
+    conversations_count = db.query(Conversation).count()
+    conversion_rate = round((total_sales_count / conversations_count * 100), 1) if conversations_count > 0 else 0.0
+
+    return {
+        "total_sales_count": total_sales_count,
+        "total_sales_volume_inr": total_sales_volume,
+        "active_listings_count": active_listings_count,
+        "sold_listings_count": sold_listings_count,
+        "reserved_listings_count": reserved_listings_count,
+        "total_listings_count": total_listings_count,
+        "total_users_count": total_users_count,
+        "buyers_count": buyers_count,
+        "sellers_count": sellers_count,
+        "conversations_count": conversations_count,
+        "conversion_rate_percent": conversion_rate
+    }
