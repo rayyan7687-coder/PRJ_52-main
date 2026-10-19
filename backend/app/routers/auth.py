@@ -11,7 +11,7 @@ from app.core.security import get_password_hash, verify_password, create_access_
 from app.core.dependencies import get_current_user
 from app.core.config import settings
 
-limiter = Limiter(key_func=get_remote_address, enabled=False)
+limiter = Limiter(key_func=get_remote_address, enabled=settings.ENVIRONMENT == "production")
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

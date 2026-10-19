@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     ADMIN_REGISTRATION_KEY: str = "admin-secret-key-123"
 
     DATABASE_URL: str = "sqlite:///./buildloop.db"
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:5173", "http://127.0.0.1:5173"
+    ]
 
     model_config = SettingsConfigDict(
         env_file=".env", case_sensitive=True, extra="ignore", enable_decoding=False

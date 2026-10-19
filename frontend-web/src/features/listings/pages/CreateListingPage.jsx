@@ -46,10 +46,11 @@ export const CreateListingPage = () => {
   const cameraInputRef = useRef(null);
   const locationInputRef = useRef(null);
 
-  // WebCam Modal Refs
+  // WebCam Modal State & Ref
   const videoRef = useRef(null);
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [mediaStream, setMediaStream] = useState(null);
+  const [cameraError, setCameraError] = useState('');
 
   const [categories, setCategories] = useState([]);
   const [step, setStep] = useState(1);
@@ -123,24 +124,33 @@ export const CreateListingPage = () => {
   // Open WebCam Camera Stream
   const openCameraStream = async () => {
     setError('');
+    setCameraError('');
+    setCameraModalOpen(true);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError('Direct camera stream is not supported on this browser context. Please use local upload or mobile camera input below.');
+      return;
+    }
+
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' }
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
         });
-        setMediaStream(stream);
-        setCameraModalOpen(true);
-        setTimeout(() => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        }, 300);
-      } else {
-        cameraInputRef.current?.click();
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
       }
-    } catch {
-      // Fallback to mobile file capture if stream blocked
-      cameraInputRef.current?.click();
+
+      setMediaStream(stream);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Camera access error:', err);
+      setCameraError('Camera access denied or device not found. Please grant camera permission or upload local photos.');
     }
   };
 
@@ -150,6 +160,7 @@ export const CreateListingPage = () => {
       setMediaStream(null);
     }
     setCameraModalOpen(false);
+    setCameraError('');
   };
 
   const capturePhotoSnapshot = () => {
@@ -469,14 +480,23 @@ export const CreateListingPage = () => {
                 onDrop={handleDrop}
                 className="border-2 border-dashed border-slate-700 bg-slate-950/60 hover:border-emerald-500/80 rounded-xl p-6 text-center space-y-4 transition"
               >
-                <div className="flex justify-center space-x-4">
+                <div className="flex justify-center flex-wrap gap-4">
                   <button
                     type="button"
                     onClick={openCameraStream}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-lg flex items-center space-x-2 shadow-lg shadow-emerald-950 transition"
                   >
                     <Camera className="h-5 w-5" />
-                    <span>Take Photo with Camera</span>
+                    <span>Open Camera Live</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold px-4 py-2.5 rounded-lg flex items-center space-x-2 transition text-xs"
+                  >
+                    <Camera className="h-4 w-4 text-emerald-400" />
+                    <span>Mobile Device Capture</span>
                   </button>
 
                   <button
@@ -644,26 +664,44 @@ export const CreateListingPage = () => {
               </button>
             </div>
 
-            <div className="relative bg-black rounded-xl overflow-hidden aspect-video border border-slate-800">
-              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-            </div>
+            {cameraError ? (
+              <div className="bg-red-950/80 border border-red-800 text-red-200 text-xs p-4 rounded-xl space-y-3">
+                <p>{cameraError}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCameraModal();
+                    fileInputRef.current?.click();
+                  }}
+                  className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-lg text-xs"
+                >
+                  Upload Photo File Instead
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="relative bg-black rounded-xl overflow-hidden aspect-video border border-slate-800">
+                  <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                </div>
 
-            <div className="flex justify-end space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={closeCameraModal}
-                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm font-bold hover:bg-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={capturePhotoSnapshot}
-                className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 shadow-lg"
-              >
-                Snap Photo
-              </button>
-            </div>
+                <div className="flex justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={closeCameraModal}
+                    className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm font-bold hover:bg-slate-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={capturePhotoSnapshot}
+                    className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 shadow-lg"
+                  >
+                    Snap Photo
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
