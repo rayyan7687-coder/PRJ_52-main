@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../../../services/api';
 import { ListingCard } from '../../listings/components/ListingCard';
 import { MapView, loadGoogleMaps } from '../../../components/Map/MapView';
@@ -21,6 +21,8 @@ export const SearchPage = () => {
   const [coords, setCoords] = useState({ latitude: 12.9716, longitude: 77.5946 });
   const [locationMessage, setLocationMessage] = useState('');
 
+  const locationInputRef = useRef(null);
+
   useEffect(() => {
     const loadCategories = async () => {
       try {
@@ -31,6 +33,31 @@ export const SearchPage = () => {
       }
     };
     loadCategories();
+  }, []);
+
+  // Google Maps Places Autocomplete setup
+  useEffect(() => {
+    let autocomplete;
+    if (locationInputRef.current) {
+      loadGoogleMaps().then((maps) => {
+        if (maps?.places && locationInputRef.current) {
+          autocomplete = new maps.places.Autocomplete(locationInputRef.current, {
+            types: ['geocode', 'establishment'],
+          });
+          autocomplete.addListener('place_changed', () => {
+            const place = autocomplete.getPlace();
+            if (place.geometry && place.geometry.location) {
+              const loc = place.geometry.location;
+              setCoords({ latitude: loc.lat(), longitude: loc.lng() });
+              setAddressInput(place.formatted_address || place.name);
+              setLocationMessage('Location set from place suggestion!');
+            }
+          });
+        }
+      }).catch(() => {
+        // Fallback if places autocomplete not available
+      });
+    }
   }, []);
 
   const fetchResults = useCallback(async () => {
@@ -68,27 +95,6 @@ export const SearchPage = () => {
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     fetchResults();
-  };
-
-  const handleAddressAutofillSearch = async () => {
-    if (!addressInput.trim()) return;
-    setLocationMessage('Searching address location on Google Maps...');
-    try {
-      const maps = await loadGoogleMaps();
-      const geocoder = new maps.Geocoder();
-      geocoder.geocode({ address: addressInput }, (results, status) => {
-        if (status === 'OK' && results && results[0]) {
-          const loc = results[0].geometry.location;
-          setCoords({ latitude: loc.lat(), longitude: loc.lng() });
-          setAddressInput(results[0].formatted_address);
-          setLocationMessage('Location set from address!');
-        } else {
-          setLocationMessage('Could not locate address.');
-        }
-      });
-    } catch {
-      setLocationMessage('Geocoding service error.');
-    }
   };
 
   const useMyLocation = () => {
@@ -130,19 +136,13 @@ export const SearchPage = () => {
           <div className="flex-1 flex items-center space-x-2 w-full">
             <MapPin className="h-5 w-5 text-emerald-400 shrink-0" />
             <input
+              ref={locationInputRef}
               type="text"
-              placeholder="Enter search city or site address (e.g. Indiranagar, Bangalore)"
+              placeholder="Type city or site address (Google Maps suggestions will appear)..."
               value={addressInput}
               onChange={(e) => setAddressInput(e.target.value)}
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-emerald-500"
             />
-            <button
-              type="button"
-              onClick={handleAddressAutofillSearch}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg text-xs shrink-0"
-            >
-              Autofill Location
-            </button>
           </div>
 
           <button

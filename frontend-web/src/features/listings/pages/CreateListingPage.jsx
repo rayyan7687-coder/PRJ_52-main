@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Upload, MapPin, ArrowRight, ArrowLeft, X, Search, Image as ImageIcon } from 'lucide-react';
+import { Camera, Upload, MapPin, ArrowRight, ArrowLeft, X, Image as ImageIcon } from 'lucide-react';
 import { MapView, loadGoogleMaps } from '../../../components/Map/MapView';
 
-// Utility to compress image to base64 Data URL
 const compressImage = (file, maxWidth = 800, maxHeight = 800, quality = 0.75) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -45,6 +44,13 @@ export const CreateListingPage = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const locationInputRef = useRef(null);
+
+  // WebCam Modal State & Ref
+  const videoRef = useRef(null);
+  const [cameraModalOpen, setCameraModalOpen] = useState(false);
+  const [mediaStream, setMediaStream] = useState(null);
+  const [cameraError, setCameraError] = useState('');
 
   const [categories, setCategories] = useState([]);
   const [step, setStep] = useState(1);
@@ -83,9 +89,96 @@ export const CreateListingPage = () => {
     loadCategories();
   }, []);
 
+  // Google Places Autocomplete on Location Input
+  useEffect(() => {
+    let autocomplete;
+    if (step === 2 && locationInputRef.current) {
+      loadGoogleMaps().then((maps) => {
+        if (maps?.places && locationInputRef.current) {
+          autocomplete = new maps.places.Autocomplete(locationInputRef.current, {
+            types: ['geocode', 'establishment'],
+          });
+          autocomplete.addListener('place_changed', () => {
+            const place = autocomplete.getPlace();
+            if (place.geometry && place.geometry.location) {
+              const loc = place.geometry.location;
+              setFormData((prev) => ({
+                ...prev,
+                latitude: loc.lat(),
+                longitude: loc.lng(),
+                location_text: place.formatted_address || place.name
+              }));
+              setGeocodingMsg('Location selected from places suggestion!');
+            }
+          });
+        }
+      }).catch(() => {});
+    }
+  }, [step]);
+
   const handleChange = (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setFormData({ ...formData, [e.target.name]: value });
+  };
+
+  // Open WebCam Camera Stream
+  const openCameraStream = async () => {
+    setError('');
+    setCameraError('');
+    setCameraModalOpen(true);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError('Direct camera stream is not supported on this browser context. Please use local upload or mobile camera input below.');
+      return;
+    }
+
+    try {
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
+
+      setMediaStream(stream);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Camera access error:', err);
+      setCameraError('Camera access denied or device not found. Please grant camera permission or upload local photos.');
+    }
+  };
+
+  const closeCameraModal = () => {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((track) => track.stop());
+      setMediaStream(null);
+    }
+    setCameraModalOpen(false);
+    setCameraError('');
+  };
+
+  const capturePhotoSnapshot = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+    setFormData((prev) => ({
+      ...prev,
+      images: [...prev.images, photoDataUrl]
+    }));
+
+    closeCameraModal();
   };
 
   const handlePhotoFiles = async (filesList) => {
@@ -100,8 +193,7 @@ export const CreateListingPage = () => {
         ...prev,
         images: [...prev.images, ...compressed]
       }));
-    } catch (err) {
-      console.error('Photo processing failed:', err);
+    } catch {
       setError('Failed to process uploaded photo. Please try another image file.');
     }
 
@@ -125,31 +217,6 @@ export const CreateListingPage = () => {
       ...prev,
       images: prev.images.filter((_, idx) => idx !== index)
     }));
-  };
-
-  const handleAddressAutofill = async () => {
-    if (!formData.location_text.trim()) return;
-    setGeocodingMsg('Locating site address on Google Maps...');
-    try {
-      const maps = await loadGoogleMaps();
-      const geocoder = new maps.Geocoder();
-      geocoder.geocode({ address: formData.location_text }, (results, status) => {
-        if (status === 'OK' && results && results[0]) {
-          const loc = results[0].geometry.location;
-          setFormData(prev => ({
-            ...prev,
-            latitude: loc.lat(),
-            longitude: loc.lng(),
-            location_text: results[0].formatted_address
-          }));
-          setGeocodingMsg('Address located and map pinned!');
-        } else {
-          setGeocodingMsg('Address not found automatically. Click on the map below to pinpoint site.');
-        }
-      });
-    } catch {
-      setGeocodingMsg('Geocoding service unavailable. Click on the map below to pinpoint site.');
-    }
   };
 
   const handleUseCurrentLocation = () => {
@@ -182,10 +249,25 @@ export const CreateListingPage = () => {
     setGeocodingMsg('Location updated from map pin!');
   };
 
+  const goToStep2 = () => {
+    if (!formData.title.trim()) {
+      setError('Listing / Item Name is strictly mandatory. Please specify the item name.');
+      return;
+    }
+    setError('');
+    setStep(2);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    if (!formData.title.trim()) {
+      setError('Listing / Item Name is strictly mandatory.');
+      setLoading(false);
+      return;
+    }
 
     if (formData.images.length === 0) {
       setError('Please upload or capture at least one real photograph of the material.');
@@ -224,7 +306,7 @@ export const CreateListingPage = () => {
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-950/80 border border-red-800 text-red-200 p-4 rounded-lg">
+        <div className="mb-6 bg-red-950/80 border border-red-800 text-red-200 p-4 rounded-lg text-sm font-semibold">
           {error}
         </div>
       )}
@@ -239,7 +321,9 @@ export const CreateListingPage = () => {
         {step === 1 && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300">Listing Title</label>
+              <label className="block text-sm font-bold text-white mb-1">
+                Listing / Item Name <span className="text-red-400">* (Mandatory)</span>
+              </label>
               <input
                 type="text"
                 name="title"
@@ -247,7 +331,7 @@ export const CreateListingPage = () => {
                 placeholder="e.g. Recovered Structural Steel I-Beams (ISMB 300)"
                 value={formData.title}
                 onChange={handleChange}
-                className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded-md py-2.5 px-3 text-white focus:ring-emerald-500"
+                className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded-md py-2.5 px-3 text-white focus:ring-emerald-500 font-semibold"
               />
             </div>
 
@@ -323,6 +407,21 @@ export const CreateListingPage = () => {
               </div>
             </div>
 
+            {/* Price Negotiable Option */}
+            <div className="pt-2 flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="is_negotiable"
+                name="is_negotiable"
+                checked={formData.is_negotiable}
+                onChange={handleChange}
+                className="h-4 w-4 rounded bg-slate-800 border-slate-700 text-emerald-600 focus:ring-emerald-500"
+              />
+              <label htmlFor="is_negotiable" className="text-sm font-semibold text-slate-200">
+                Price is Negotiable (Buyers can submit counter-offers in chat)
+              </label>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-slate-300">Description</label>
               <textarea
@@ -338,7 +437,7 @@ export const CreateListingPage = () => {
             <div className="flex justify-end pt-4">
               <button
                 type="button"
-                onClick={() => setStep(2)}
+                onClick={goToStep2}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-lg flex items-center space-x-2"
               >
                 <span>Next: Photos & Location</span>
@@ -356,7 +455,7 @@ export const CreateListingPage = () => {
                 <span>Upload or Take Material Photos</span>
               </label>
               <p className="text-xs text-slate-400 mb-4">
-                Please upload or capture real site photographs. URL text inputs have been removed.
+                Please upload or capture real site photographs.
               </p>
 
               <input
@@ -381,14 +480,23 @@ export const CreateListingPage = () => {
                 onDrop={handleDrop}
                 className="border-2 border-dashed border-slate-700 bg-slate-950/60 hover:border-emerald-500/80 rounded-xl p-6 text-center space-y-4 transition"
               >
-                <div className="flex justify-center space-x-4">
+                <div className="flex justify-center flex-wrap gap-4">
                   <button
                     type="button"
-                    onClick={() => cameraInputRef.current?.click()}
+                    onClick={openCameraStream}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-lg flex items-center space-x-2 shadow-lg shadow-emerald-950 transition"
                   >
                     <Camera className="h-5 w-5" />
-                    <span>Take Photo with Camera</span>
+                    <span>Open Camera Live</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold px-4 py-2.5 rounded-lg flex items-center space-x-2 transition text-xs"
+                  >
+                    <Camera className="h-4 w-4 text-emerald-400" />
+                    <span>Mobile Device Capture</span>
                   </button>
 
                   <button
@@ -401,7 +509,7 @@ export const CreateListingPage = () => {
                   </button>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Or drag and drop photo files here (JPEG, PNG, WEBP). Images will be automatically compressed for fast loading.
+                  Or drag and drop photo files here (JPEG, PNG, WEBP).
                 </p>
               </div>
 
@@ -432,26 +540,20 @@ export const CreateListingPage = () => {
               )}
             </div>
 
+            {/* Google Places Autocomplete Location Input */}
             <div className="pt-6 border-t border-slate-800 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300">Site Pickup Address</label>
                 <div className="mt-1 flex gap-2">
                   <input
+                    ref={locationInputRef}
                     type="text"
                     name="location_text"
-                    placeholder="Enter site address (e.g. Whitefield, Bangalore)"
+                    placeholder="Type site address (Google Places suggestions appear as you type)..."
                     value={formData.location_text}
                     onChange={handleChange}
                     className="flex-1 bg-slate-800 border border-slate-700 rounded-md py-2.5 px-3 text-white focus:ring-emerald-500 text-sm"
                   />
-                  <button
-                    type="button"
-                    onClick={handleAddressAutofill}
-                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white px-4 py-2.5 rounded-md text-xs font-semibold flex items-center space-x-1 shrink-0"
-                  >
-                    <Search className="h-3.5 w-3.5 text-emerald-400" />
-                    <span>Autofill Address</span>
-                  </button>
                 </div>
               </div>
 
@@ -547,6 +649,62 @@ export const CreateListingPage = () => {
           </div>
         )}
       </form>
+
+      {/* WebCam Capture Stream Modal */}
+      {cameraModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white flex items-center space-x-2">
+                <Camera className="h-5 w-5 text-emerald-400" />
+                <span>Take Site Photo</span>
+              </h3>
+              <button onClick={closeCameraModal} className="text-slate-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {cameraError ? (
+              <div className="bg-red-950/80 border border-red-800 text-red-200 text-xs p-4 rounded-xl space-y-3">
+                <p>{cameraError}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCameraModal();
+                    fileInputRef.current?.click();
+                  }}
+                  className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-lg text-xs"
+                >
+                  Upload Photo File Instead
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="relative bg-black rounded-xl overflow-hidden aspect-video border border-slate-800">
+                  <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={closeCameraModal}
+                    className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm font-bold hover:bg-slate-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={capturePhotoSnapshot}
+                    className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 shadow-lg"
+                  >
+                    Snap Photo
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

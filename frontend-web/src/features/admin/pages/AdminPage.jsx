@@ -2,29 +2,33 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../services/api';
 import {
   Shield, UserX, UserCheck, AlertTriangle, EyeOff,
-  Users, Package, AlertCircle, Check, Search
+  Users, Package, AlertCircle, Check, Search,
+  DollarSign, ShoppingCart, BarChart3, Activity
 } from 'lucide-react';
 
 export const AdminPage = () => {
   const [users, setUsers] = useState([]);
   const [reports, setReports] = useState([]);
   const [listings, setListings] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState('cases'); // 'cases', 'users', 'listings'
+  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics', 'cases', 'users', 'listings'
   const [caseFilter, setCaseFilter] = useState('ALL'); // 'ALL', 'PENDING', 'RESOLVED'
   const [userSearch, setUserSearch] = useState('');
 
   const fetchAdminData = async () => {
     try {
-      const [uData, rData, lData] = await Promise.all([
+      const [uData, rData, lData, sData] = await Promise.all([
         apiFetch('/admin/users'),
         apiFetch('/admin/reports'),
-        apiFetch('/listings?status=ACTIVE')
+        apiFetch('/admin/listings'),
+        apiFetch('/admin/stats').catch(() => null)
       ]);
-      setUsers(uData);
-      setReports(rData);
-      setListings(lData);
+      setUsers(uData || []);
+      setReports(rData || []);
+      setListings(lData || []);
+      setStats(sData || null);
     } catch (err) {
       console.error('Error fetching admin moderation data:', err);
     } finally {
@@ -71,6 +75,15 @@ export const AdminPage = () => {
 
   const pendingCases = reports.filter(r => r.status === 'PENDING');
   const blockedUsersCount = users.filter(u => !u.is_active).length;
+  const activeListingsCount = listings.filter(l => l.status === 'ACTIVE' && l.is_visible).length;
+  const soldListingsCount = listings.filter(l => l.status === 'SOLD').length;
+  const reservedListingsCount = listings.filter(l => l.status === 'RESERVED').length;
+
+  const totalBuyers = stats?.buyers_count || users.filter(u => u.role === 'BUYER' || u.role === 'CONTRACTOR_BUILDER').length;
+  const totalSellers = stats?.sellers_count || users.filter(u => u.role === 'SELLER' || u.role === 'CONTRACTOR_BUILDER').length;
+  const totalUsers = users.length || 1;
+  const buyerPercent = Math.round((totalBuyers / totalUsers) * 100);
+  const sellerPercent = Math.round((totalSellers / totalUsers) * 100);
 
   const filteredReports = reports.filter(r => {
     if (caseFilter === 'PENDING') return r.status === 'PENDING';
@@ -93,17 +106,23 @@ export const AdminPage = () => {
             <Shield className="h-8 w-8" />
           </div>
           <div>
-            <h1 className="text-3xl font-black text-white">Marketplace Moderation & Fraud Console</h1>
-            <p className="text-slate-400 text-sm">Review fraud reports, manage accounts, block malicious users, and control material listings.</p>
+            <h1 className="text-3xl font-black text-white">Marketplace Moderation & Analytics Console</h1>
+            <p className="text-slate-400 text-sm">Review sales metrics, fraud reports, user accounts, and material listings.</p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-xs font-semibold">
+        <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-xs font-semibold overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-4 py-2 rounded-md transition ${activeTab === 'analytics' ? 'bg-amber-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+          >
+            Analytics & Sales
+          </button>
           <button
             onClick={() => setActiveTab('cases')}
             className={`px-4 py-2 rounded-md transition ${activeTab === 'cases' ? 'bg-amber-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
           >
-            Fraud Cases ({pendingCases.length} Pending)
+            Fraud Cases ({pendingCases.length})
           </button>
           <button
             onClick={() => setActiveTab('users')}
@@ -124,36 +143,176 @@ export const AdminPage = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-1 shadow-md">
           <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
-            <span>Pending Cases</span>
-            <AlertTriangle className="h-4 w-4 text-amber-400" />
-          </div>
-          <span className="text-3xl font-black text-amber-400">{pendingCases.length}</span>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-1 shadow-md">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
-            <span>Total Accounts</span>
-            <Users className="h-4 w-4 text-emerald-400" />
-          </div>
-          <span className="text-3xl font-black text-white">{users.length}</span>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-1 shadow-md">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
-            <span>Blocked Accounts</span>
-            <UserX className="h-4 w-4 text-red-400" />
-          </div>
-          <span className="text-3xl font-black text-red-400">{blockedUsersCount}</span>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-1 shadow-md">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
             <span>Active Listings</span>
             <Package className="h-4 w-4 text-emerald-400" />
           </div>
-          <span className="text-3xl font-black text-emerald-400">{listings.length}</span>
+          <span className="text-3xl font-black text-emerald-400">{activeListingsCount}</span>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-1 shadow-md">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Completed Sales</span>
+            <ShoppingCart className="h-4 w-4 text-amber-400" />
+          </div>
+          <span className="text-3xl font-black text-amber-400">{stats?.total_sales_count || soldListingsCount}</span>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-1 shadow-md">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Sales Revenue (INR)</span>
+            <DollarSign className="h-4 w-4 text-emerald-400" />
+          </div>
+          <span className="text-3xl font-black text-white">₹{stats?.total_sales_volume_inr?.toLocaleString('en-IN') || 0}</span>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-1 shadow-md">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Pending Fraud Cases</span>
+            <AlertTriangle className="h-4 w-4 text-red-400" />
+          </div>
+          <span className="text-3xl font-black text-red-400">{pendingCases.length}</span>
         </div>
       </div>
+
+      {/* TAB 0: ANALYTICS & MARKETPLACE STATISTICS */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Graph Card 1: Sales & Revenue Breakdown */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2">
+                  <BarChart3 className="h-5 w-5 text-emerald-400" />
+                  <h2 className="font-bold text-white text-base">Marketplace Sales & Volume (INR)</h2>
+                </div>
+                <span className="text-xs text-emerald-400 font-semibold bg-emerald-950 border border-emerald-800 px-2.5 py-1 rounded-full">
+                  Real-time Data
+                </span>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1">
+                    <span>Active Listings Volume</span>
+                    <span className="text-emerald-400">{activeListingsCount} listings</span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+                    <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min(100, (activeListingsCount / (listings.length || 1)) * 100)}%` }}></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1">
+                    <span>Reserved Material Batches</span>
+                    <span className="text-amber-400">{reservedListingsCount} reserved</span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+                    <div className="bg-amber-500 h-full rounded-full" style={{ width: `${Math.min(100, (reservedListingsCount / (listings.length || 1)) * 100)}%` }}></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1">
+                    <span>Completed Sales Deals</span>
+                    <span className="text-blue-400">{soldListingsCount} completed</span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+                    <div className="bg-blue-500 h-full rounded-full" style={{ width: `${Math.min(100, (soldListingsCount / (listings.length || 1)) * 100)}%` }}></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800/80 flex justify-between items-center text-xs text-slate-400">
+                <span>Total Catalog Inventory: <strong className="text-white">{listings.length}</strong> items</span>
+                <span>Revenue: <strong className="text-emerald-400">₹{stats?.total_sales_volume_inr?.toLocaleString('en-IN') || 0}</strong></span>
+              </div>
+            </div>
+
+            {/* Graph Card 2: Viewers / Inquirers vs Buyers & Sellers */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Users className="h-5 w-5 text-amber-400" />
+                  <h2 className="font-bold text-white text-base">Buyers vs Sellers & Inquirers</h2>
+                </div>
+                <span className="text-xs text-amber-400 font-semibold bg-amber-950 border border-amber-800 px-2.5 py-1 rounded-full">
+                  User Ratios
+                </span>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1">
+                    <span>Contractors / Buyers Ratio</span>
+                    <span className="text-emerald-400">{totalBuyers} buyers ({buyerPercent}%)</span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+                    <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min(100, buyerPercent)}%` }}></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1">
+                    <span>Sellers / Recyclers Ratio</span>
+                    <span className="text-amber-400">{totalSellers} sellers ({sellerPercent}%)</span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+                    <div className="bg-amber-500 h-full rounded-full" style={{ width: `${Math.min(100, sellerPercent)}%` }}></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1">
+                    <span>Inquiries / Deal Conversations</span>
+                    <span className="text-indigo-400">{stats?.conversations_count || 0} active threads</span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+                    <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${Math.min(100, ((stats?.conversations_count || 0) / (users.length || 1)) * 100)}%` }}></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800/80 flex justify-between items-center text-xs text-slate-400">
+                <span>Total Accounts: <strong className="text-white">{users.length}</strong></span>
+                <span>Blocked: <strong className="text-red-400">{blockedUsersCount}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Graph Card 3: Deal Conversion Performance Meter */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <Activity className="h-5 w-5 text-indigo-400" />
+                <h2 className="font-bold text-white text-base">Marketplace Deal Conversion & Efficiency Meter</h2>
+              </div>
+              <span className="text-xs text-indigo-400 font-semibold bg-indigo-950 border border-indigo-800 px-2.5 py-1 rounded-full">
+                Conversion Rate
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center pt-2">
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center space-y-1">
+                <span className="text-xs text-slate-400 uppercase font-bold">Inquiries Started</span>
+                <p className="text-2xl font-black text-indigo-400">{stats?.conversations_count || 0}</p>
+                <p className="text-[11px] text-slate-500">Buyer-Seller Negotiation Threads</p>
+              </div>
+
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center space-y-1">
+                <span className="text-xs text-slate-400 uppercase font-bold">Completed Deals</span>
+                <p className="text-2xl font-black text-emerald-400">{stats?.total_sales_count || soldListingsCount}</p>
+                <p className="text-[11px] text-slate-500">Successful Sales Transactions</p>
+              </div>
+
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center space-y-1">
+                <span className="text-xs text-slate-400 uppercase font-bold">Conversion Yield</span>
+                <p className="text-2xl font-black text-amber-400">{stats?.conversion_rate_percent || 0}%</p>
+                <p className="text-[11px] text-slate-500">Inquiry to Sale Conversion</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: FRAUD CASES & REPORTS */}
       {activeTab === 'cases' && (
@@ -229,7 +388,6 @@ export const AdminPage = () => {
                       </div>
                     </div>
 
-                    {/* Direct Action Buttons */}
                     <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0 w-full md:w-auto">
                       {r.reported_user_id && (
                         <button
@@ -344,8 +502,11 @@ export const AdminPage = () => {
       {/* TAB 3: LISTINGS OVERSIGHT */}
       {activeTab === 'listings' && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl space-y-4">
-          <div className="px-6 py-4 bg-slate-950 border-b border-slate-800">
-            <h2 className="text-lg font-bold text-white">Active Material Listings ({listings.length})</h2>
+          <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
+            <h2 className="text-lg font-bold text-white">All Marketplace Material Listings ({listings.length})</h2>
+            <span className="text-xs text-slate-400">
+              Active: <strong className="text-emerald-400">{activeListingsCount}</strong> • Sold: <strong className="text-blue-400">{soldListingsCount}</strong>
+            </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
@@ -353,8 +514,10 @@ export const AdminPage = () => {
               <div key={item.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 flex flex-col justify-between">
                 <div className="space-y-2">
                   <div className="flex justify-between items-start">
-                    <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-bold">
-                      {item.material_type}
+                    <span className={`text-xs px-2 py-0.5 rounded font-bold uppercase border ${
+                      item.status === 'ACTIVE' ? 'bg-emerald-950 text-emerald-400 border-emerald-800' : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}>
+                      {item.status}
                     </span>
                     <span className="text-xs text-slate-500 font-mono">ID #{item.id}</span>
                   </div>
@@ -365,13 +528,15 @@ export const AdminPage = () => {
 
                 <div className="pt-3 border-t border-slate-900 flex justify-between items-center">
                   <span className="text-xs text-slate-500">Seller ID: #{item.seller_id}</span>
-                  <button
-                    onClick={() => handleHideListing(item.id)}
-                    className="bg-amber-950 hover:bg-amber-900 text-amber-300 border border-amber-800 text-xs font-bold px-3 py-1.5 rounded flex items-center space-x-1"
-                  >
-                    <EyeOff className="h-3.5 w-3.5" />
-                    <span>Hide Listing</span>
-                  </button>
+                  {item.is_visible && (
+                    <button
+                      onClick={() => handleHideListing(item.id)}
+                      className="bg-amber-950 hover:bg-amber-900 text-amber-300 border border-amber-800 text-xs font-bold px-3 py-1.5 rounded flex items-center space-x-1"
+                    >
+                      <EyeOff className="h-3.5 w-3.5" />
+                      <span>Hide Listing</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

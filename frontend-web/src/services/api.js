@@ -1,4 +1,5 @@
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api/v1';
+const rawApiUrl = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
+const API_BASE = (import.meta.env.DEV && !import.meta.env.VITE_API_URL ? '' : rawApiUrl) + '/api/v1';
 
 export const getWebSocketUrl = (conversationId, token) => {
   let wsBase = API_BASE.replace(/^http/, 'ws');
@@ -29,7 +30,6 @@ export const apiFetch = async (endpoint, options = {}) => {
   let response = await fetch(`${API_BASE}${endpoint}`, fetchOptions);
 
   if (response.status === 401) {
-    // Attempt silent refresh using refresh_token cookie
     try {
       const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
